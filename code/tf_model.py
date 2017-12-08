@@ -82,8 +82,8 @@ def padMatrix(seqs):
 
 
 if __name__ == '__main__':
-    dataFile = '../rawdata/data.pkl'
-    labelFile = '../rawdata/label.pkl'
+    dataFile = '../rawdata/data_pkl/data.pkl'
+    labelFile = '../rawdata/data_pkl/label.pkl'
     layer_size = 2
     batch_size = 128
     hidden_size = 100
@@ -196,11 +196,11 @@ if __name__ == '__main__':
             tr_probs, tr_acc, loss_, _ = sess.run([probs, accuracy, loss, train_op],
                                                   feed_dict={X: padMatrix(train_set0),
                                                              Y: np.array(train_set1), X_len: train_set2})
-            tr_auc = roc_auc_score(train_set1, tr_probs)
+            # tr_auc = roc_auc_score(train_set1, tr_probs)
 
             print("Batch " + "{:d}".format(batch) + "/" + "{:d}".format(num_batches) + \
                   ", took: " + "{:.3f}".format(time() - batch_start) + ", loss: " + "{:.5f}".format(
-                loss_) + " Acc: " + "{:.5f}".format(tr_acc) + ",auc:" + "{:.5f}".format(tr_auc))
+                loss_) + " Acc: " + "{:.5f}".format(tr_acc))
             batch = batch + 1
             total_batches = total_batches + 1
             sys.stdout.flush()
