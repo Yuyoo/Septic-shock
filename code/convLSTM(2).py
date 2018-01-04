@@ -1,8 +1,9 @@
 # Imports
-import tensorflow as tf
 import pickle
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
 from evaluation import *
 
 
@@ -79,8 +80,8 @@ def get_batches(X, y, batch_size=100):
 
 if __name__ == '__main__':
 
-    dataFile = '../rawdata/data.pkl'
-    labelFile = '../rawdata/label.pkl'
+    dataFile = '../rawdata/data_pkl/data.pkl'
+    labelFile = '../rawdata/data_pkl/label.pkl'
     # dataFile = '../rawdata/data_for_predict.pkl'
     # labelFile = '../rawdata/label_for_predict.pkl'
     X_tr, lab_tr, X_vld, lab_vld, X_test, lab_test = load_data(dataFile, labelFile)
@@ -94,14 +95,13 @@ if __name__ == '__main__':
     batch_size = 200  # Batch size
     seq_len = 48  # Number of steps
     learning_rate = 0.0001  # Learning rate (default is 0.001)
-    epochs = 300
+    epochs = 100
     keep_prob = 0.8
     # Fixed
     n_classes = 2
     n_channels = 51
 
     # train_set, valid_set, test_set = load_data(dataFile, labelFile, bucketing=True)
-
 
     graph = tf.Graph()
 
@@ -116,30 +116,32 @@ if __name__ == '__main__':
         # filters 是卷积核数量（Integer, the dimensionality of the output space）
         # with graph.as_default():
         # (batch, 128, 9) --> (batch, 128, 10)
-        conv1 = tf.layers.conv1d(inputs=inputs_, filters=100, kernel_size=6, strides=1,
-                                 padding='same', activation=tf.nn.relu)
+        with tf.name_scope('conv1'):
+            conv1 = tf.layers.conv1d(inputs=inputs_, filters=100, kernel_size=6, strides=1,
+                                     padding='same', activation=tf.nn.relu)
         # n_ch = n_channels * 2      # n_ch是卷积后的特征数量
         n_ch = 100
 
-        # with graph.as_default():
-        # Construct the LSTM inputs and LSTM cells
-        lstm_in = tf.transpose(conv1, [1, 0, 2])  # reshape into (seq_len, batch, channels)
-        lstm_in = tf.reshape(lstm_in, [-1, n_ch])  # Now (seq_len*N, n_channels)
+        with tf.name_scope('LSTM_in'):
+            # with graph.as_default():
+            # Construct the LSTM inputs and LSTM cells
+            lstm_in = tf.transpose(conv1, [1, 0, 2])  # reshape into (seq_len, batch, channels)
+            lstm_in = tf.reshape(lstm_in, [-1, n_ch])  # Now (seq_len*N, n_channels)
 
-        # To cells
-        """
-        tf.layers.dense()
-        This layer implements the operation: outputs = activation(inputs.kernel + bias) Where activation is the 
-        activation function passed as the activation argument (if not None), kernel is a weights matrix created by 
-        the layer, and bias is a bias vector created by the layer (only if use_bias is True).
-        此函数参数默认加bias
-        kernel_initializer: Initializer function for the weight matrix. If None (default), 
-        weights are initialized using the default initializer used by tf.get_variable.
-        """
-        lstm_in = tf.layers.dense(lstm_in, lstm_size, activation=None)  # or tf.nn.relu, tf.nn.sigmoid, tf.nn.tanh?
+            # To cells
+            """
+            tf.layers.dense()
+            This layer implements the operation: outputs = activation(inputs.kernel + bias) Where activation is the 
+            activation function passed as the activation argument (if not None), kernel is a weights matrix created by 
+            the layer, and bias is a bias vector created by the layer (only if use_bias is True).
+            此函数参数默认加bias
+            kernel_initializer: Initializer function for the weight matrix. If None (default), 
+            weights are initialized using the default initializer used by tf.get_variable.
+            """
+            lstm_in = tf.layers.dense(lstm_in, lstm_size, activation=None)  # or tf.nn.relu, tf.nn.sigmoid, tf.nn.tanh?
 
-        # Open up the tensor into a list of seq_len pieces
-        lstm_in = tf.split(lstm_in, seq_len, 0)
+            # Open up the tensor into a list of seq_len pieces
+            lstm_in = tf.split(lstm_in, seq_len, 0)
 
         """
         BasicRNNCell是最基本的RNNcell单元。
@@ -152,27 +154,28 @@ if __name__ == '__main__':
         
         """
         # Add LSTM layers
-        lstm = tf.contrib.rnn.BasicLSTMCell(lstm_size)
-        drop = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=keep_prob_)
-        cell = tf.contrib.rnn.MultiRNNCell([drop] * lstm_layers)
-        initial_state = cell.zero_state(batch_size, tf.float32)
+        with tf.name_scope('RNN'):
+            lstm = tf.contrib.rnn.BasicLSTMCell(lstm_size)
+            drop = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=keep_prob_)
+            cell = tf.contrib.rnn.MultiRNNCell([drop] * lstm_layers)
+            initial_state = cell.zero_state(batch_size, tf.float32)
 
-        # with graph.as_default():
-        """
-        单层rnn: tf.contrib.rnn.static_rnn：
-        参数：inputs是长为T的列表A length T list of inputs, each a `Tensor` of shape
-                    [batch_size, input_size]`, or a nested tuple of such elements
-              dtype是初始状态和期望输出的数据类型
-        输出： A pair (outputs, state) where:
-              - outputs is a length T list of outputs (one for each input), or a nested
-                tuple of such elements.
-              - state is the final state
-        还有rnn中加dropout
+            # with graph.as_default():
+            """
+            单层rnn: tf.contrib.rnn.static_rnn：
+            参数：inputs是长为T的列表A length T list of inputs, each a `Tensor` of shape
+                        [batch_size, input_size]`, or a nested tuple of such elements
+                  dtype是初始状态和期望输出的数据类型
+            输出： A pair (outputs, state) where:
+                  - outputs is a length T list of outputs (one for each input), or a nested
+                    tuple of such elements.
+                  - state is the final state
+            还有rnn中加dropout
+    
+            """
 
-        """
-
-        outputs, final_state = tf.contrib.rnn.static_rnn(cell, lstm_in, dtype=tf.float32,
-                                                         initial_state=initial_state)
+            outputs, final_state = tf.contrib.rnn.static_rnn(cell, lstm_in, dtype=tf.float32,
+                                                             initial_state=initial_state)
         """
         final_outputs = final_state[layer_size - 1][1]  # 返回最后一层最后一个状态元组的第二个张量，作为输出
         preds = tf.matmul(final_outputs, weight['out']) + bias['out']
@@ -181,24 +184,28 @@ if __name__ == '__main__':
         # We only need the last output tensor to pass into a classifier
         logits = tf.layers.dense(outputs[-1], n_classes, name='logits')
 
-        # Cost function and optimizer
-        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels_))
+        with tf.name_scope('cross_entropy'):
+            # Cost function and optimizer
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels_))
+        tf.summary.scalar("loss", cost)
         # optimizer = tf.train.AdamOptimizer(learning_rate_).minimize(cost) # No grad clipping
 
-        # Grad clipping
-        # tf.train.AdamOptimizer函数默认参数ersilon = 1e-08
-        train_op = tf.train.AdamOptimizer(learning_rate_)
+        with tf.name_scope('train'):
+            # Grad clipping
+            # tf.train.AdamOptimizer函数默认参数ersilon = 1e-08
+            train_op = tf.train.AdamOptimizer(learning_rate_)
 
-        gradients = train_op.compute_gradients(cost)
+            gradients = train_op.compute_gradients(cost)
+
         """
         tf.clip_by_value:
         Given a tensor t, this operation returns a tensor of the same type and shape as t with its values clipped to 
         clip_value_min and clip_value_max. Any values less than clip_value_min are set to clip_value_min. 
         Any values greater than clip_value_max are set to clip_value_max.
         """
-
-        capped_gradients = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gradients]
-        optimizer = train_op.apply_gradients(capped_gradients)
+        with tf.name_scope('clip_value'):
+            capped_gradients = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gradients]
+            optimizer = train_op.apply_gradients(capped_gradients)
         """
         with tf.name_scope('accuracy'):
             with tf.name_scope('correct_prediction'):
@@ -206,12 +213,15 @@ if __name__ == '__main__':
             with tf.name_scope('accuracy'):
                 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
         """
-        # Accuracy
-        y_pred = tf.argmax(logits, 1);
-        y_true = tf.argmax(labels_, 1)
-        correct_pred = tf.equal(y_pred, y_true)  # tf.argmax就是返回最大的那个数值所在的下标
-        accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')  # tf.cast：用于改变某个张量的数据类型
-
+        with tf.name_scope('accuracy'):
+            # Accuracy
+            y_pred = tf.argmax(logits, 1);
+            y_true = tf.argmax(labels_, 1)
+            with tf.name_scope('correct_prediction'):
+                correct_pred = tf.equal(y_pred, y_true)  # tf.argmax就是返回最大的那个数值所在的下标
+            with tf.name_scope('accuracy'):
+                accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')  # tf.cast：用于改变某个张量的数据类型
+        tf.summary.scalar("accuracy", accuracy)
     validation_acc = []
     validation_loss = []
 
@@ -220,12 +230,18 @@ if __name__ == '__main__':
 
     with graph.as_default():
         saver = tf.train.Saver()
+        merged = tf.summary.merge_all()
+
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     session = tf.Session(config=config, graph=graph)
 
+
     with session as sess:
+        train_writer = tf.summary.FileWriter('F://301/github/septic-shock/code/train',
+                                             session.graph)
+        test_writer = tf.summary.FileWriter('F://301/github/septic-shock/code/test')
         sess.run(tf.global_variables_initializer())
         iteration = 1
 
@@ -240,11 +256,12 @@ if __name__ == '__main__':
                 feed = {inputs_: x, labels_: y, keep_prob_: keep_prob,
                         initial_state: state, learning_rate_: learning_rate}
 
-                loss, output, _, state, acc = sess.run([cost, outputs, optimizer, final_state, accuracy],
-                                                       feed_dict=feed)
+                loss, output, _, state, acc, summary = sess.run([cost, outputs, optimizer, final_state, accuracy,
+                                                                 merged], feed_dict=feed)
 
                 train_acc.append(acc)
                 train_loss.append(loss)
+                train_writer.add_summary(summary, e)
 
                 # Print at each 5 iters
                 if (iteration % 5 == 0):
@@ -269,12 +286,13 @@ if __name__ == '__main__':
                         feed = {inputs_: x_v, labels_: y_v, keep_prob_: 1.0, initial_state: val_state}
 
                         # Loss
-                        loss_v, state_v, y_pred_v, y_true_v, acc_v = sess.run(
-                            [cost, final_state, y_pred, y_true, accuracy], feed_dict=feed)
+                        loss_v, state_v, y_pred_v, y_true_v, acc_v, summary = sess.run(
+                            [cost, final_state, y_pred, y_true, accuracy, merged], feed_dict=feed)
                         val_pred.append(y_pred_v)
                         val_true.append(y_true_v)
                         val_acc_.append(acc_v)
                         val_loss_.append(loss_v)
+                        test_writer.add_summary(summary, e)
                     auc_v = auc(val_true, val_pred)
                     precision_v, recall_v = precision_recall(val_true, val_pred)
                     # Print info
