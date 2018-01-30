@@ -1,4 +1,5 @@
 # Imports
+import datetime
 import pickle
 
 import matplotlib.pyplot as plt
@@ -17,8 +18,8 @@ def load_data(sequenceFile, labelFile):
             valid_set: 验证集元组（输入，标签）
             test_set: 测试集元组（输入，标签）
     """
-    sequences = np.array(pickle.load(open(sequenceFile, 'rb')))  # 读取输入序列文件
-    labels = np.array(pickle.load(open(labelFile, 'rb')))  # 读取真实标签文件
+    sequences = pickle.load(open(sequenceFile, 'rb'))  # 读取输入序列文件
+    labels = pickle.load(open(labelFile, 'rb'))  # 读取真实标签文件
     labels = np.squeeze(np.reshape(labels, (-1, 1)))
     seq_len = np.array([len(seq) for seq in sequences])  # 获取每个样本的长度
 
@@ -30,13 +31,13 @@ def load_data(sequenceFile, labelFile):
     per_ind_p = np.random.permutation(ind_p)  # 生成正样本随机排列数，作为数据集的随机索引
     per_ind_f = np.random.permutation(ind_f)  # 生成负样本随机排列数，作为数据集的随机索引
 
-    ind1 = int(0.1 * len(ind_p));
+    ind1 = int(0.1 * len(ind_p))
     ind2 = int(0.1 * len(ind_f))
-    testP_ind = ind_p[:ind1];
-    valP_ind = ind_p[ind1:ind1 * 2];
+    testP_ind = ind_p[:ind1]
+    valP_ind = ind_p[ind1:ind1 * 2]
     trainP_ind = ind_p[ind1 * 2:]
-    testf_ind = ind_f[:ind2];
-    valf_ind = ind_f[ind2:ind2 * 2];
+    testf_ind = ind_f[:ind2]
+    valf_ind = ind_f[ind2:ind2 * 2]
     trainf_ind = ind_f[ind2 * 2:]
     test_indices = np.random.permutation(np.concatenate((testP_ind, testf_ind)))  # 测试集的样本下标
     valid_indices = np.random.permutation(np.concatenate((valP_ind, valf_ind)))  # 训练集的样本下标
@@ -78,25 +79,15 @@ def get_batches(X, y, batch_size=100):
         yield X[b:b + batch_size], y[b:b + batch_size]
 
 
-if __name__ == '__main__':
-
-    dataFile = '../rawdata/data_pkl/data.pkl'
-    labelFile = '../rawdata/data_pkl/label.pkl'
-    # dataFile = '../rawdata/data_for_predict.pkl'
-    # labelFile = '../rawdata/label_for_predict.pkl'
+def model(dataFile, labelFile, lstm_size, lstm_layers, batch_size, seq_len, gap_len, learning_rate, epochs, keep_prob):
     X_tr, lab_tr, X_vld, lab_vld, X_test, lab_test = load_data(dataFile, labelFile)
-
+    X_tr = X_tr[:, -(seq_len + gap_len):-gap_len, :]
+    X_vld = X_vld[:, -(seq_len + gap_len):-gap_len, :]
+    X_test = X_test[:, -(seq_len + gap_len):-gap_len, :]
     y_tr = one_hot(np.squeeze(lab_tr))
     y_vld = one_hot(np.squeeze(lab_vld))
     y_test = one_hot(np.squeeze(lab_test))
 
-    lstm_size = 60  # 2 times the amount of channels
-    lstm_layers = 1  # Number of layers
-    batch_size = 200  # Batch size
-    seq_len = 48  # Number of steps
-    learning_rate = 0.0001  # Learning rate (default is 0.001)
-    epochs = 100
-    keep_prob = 0.8
     # Fixed
     n_classes = 2
     n_channels = 51
@@ -149,9 +140,9 @@ if __name__ == '__main__':
         input_size（该参数已被弃用）
         activation: 内部状态之间的激活函数
         reuse: Python布尔值, 描述是否重用现有作用域中的变量
-        
+
         # 使用 DropoutWrapper 类来实现 dropout 功能，output_keep_prob 控制输出的 dropout 概率 
-        
+
         """
         # Add LSTM layers
         with tf.name_scope('RNN'):
@@ -171,7 +162,7 @@ if __name__ == '__main__':
                     tuple of such elements.
                   - state is the final state
             还有rnn中加dropout
-    
+
             """
 
             outputs, final_state = tf.contrib.rnn.static_rnn(cell, lstm_in, dtype=tf.float32,
@@ -222,6 +213,27 @@ if __name__ == '__main__':
             with tf.name_scope('accuracy'):
                 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')  # tf.cast：用于改变某个张量的数据类型
         tf.summary.scalar("accuracy", accuracy)
+        """
+        
+        with tf.name_scope('PR'):
+            
+            precision, TPFP = tf.metrics.precision_at_thresholds(labels_, logits, name='precision',thresholds=201)
+            recall, TPFN = tf.metrics.recall_at_thresholds(labels_, logits, name='recall',thresholds=201)
+            TP, TP_update = tf.metrics.true_positives_at_thresholds(labels_, logits, name='TP',thresholds=201)
+            TN, TN_updata = tf.metrics.true_negatives_at_thresholds(labels_, logits, name='TN',thresholds=201)
+            FP, FP_update = tf.metrics.false_positives_at_thresholds(labels_, logits, name='FP',thresholds=201)
+            FN, FN_update = tf.metrics.false_negatives_at_thresholds(labels_, logits, name='FN',thresholds=201)
+
+            summary_lib.pr_curve_raw_data(name='prc', true_positive_counts=TP, false_positive_counts=FP,
+                                          true_negative_counts=TN, false_negative_counts=FN, precision=precision,
+                                          recall=recall, display_name='PR Curve',num_thresholds=201)
+            summary_lib.scalar('f1_max', tf.reduce_max(2.0 * precision * recall / tf.maximum(precision + recall, 1e-7)))
+            
+            _, update_op = summary_lib.pr_curve_streaming_op('foo',
+                                                             predictions=logits,
+                                                             labels=labels_,
+                                                             num_thresholds=201)
+        """
     validation_acc = []
     validation_loss = []
 
@@ -232,14 +244,12 @@ if __name__ == '__main__':
         saver = tf.train.Saver()
         merged = tf.summary.merge_all()
 
-
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     session = tf.Session(config=config, graph=graph)
 
-
     with session as sess:
-        train_writer = tf.summary.FileWriter('F://301/github/septic-shock/code/train',
+        train_writer = tf.summary.FileWriter(LOGDIR + hparam_str,
                                              session.graph)
         test_writer = tf.summary.FileWriter('F://301/github/septic-shock/code/test')
         sess.run(tf.global_variables_initializer())
@@ -263,13 +273,14 @@ if __name__ == '__main__':
                 train_loss.append(loss)
                 train_writer.add_summary(summary, e)
 
+                """
                 # Print at each 5 iters
                 if (iteration % 5 == 0):
                     print("Epoch: {}/{}".format(e, epochs),
                           "Iteration: {:d}".format(iteration),
                           "Train loss: {:6f}".format(loss),
                           "Train acc: {:.6f}".format(acc))
-
+                """
                 # 每经过34次iteration计算交叉验证集的损失函数以及正确率等指标
                 # 这里选择34次是因为训练集有34个batch，每经过34次iteration就相当于在训练集上完成一遍训练
                 if (iteration % 34 == 0):
@@ -286,16 +297,17 @@ if __name__ == '__main__':
                         feed = {inputs_: x_v, labels_: y_v, keep_prob_: 1.0, initial_state: val_state}
 
                         # Loss
-                        loss_v, state_v, y_pred_v, y_true_v, acc_v, summary = sess.run(
-                            [cost, final_state, y_pred, y_true, accuracy, merged], feed_dict=feed)
+                        loss_v, state_v, y_pred_v, y_true_v, acc_v, = sess.run(
+                            [cost, final_state, y_pred, y_true, accuracy], feed_dict=feed)
                         val_pred.append(y_pred_v)
                         val_true.append(y_true_v)
                         val_acc_.append(acc_v)
                         val_loss_.append(loss_v)
-                        test_writer.add_summary(summary, e)
+                        # test_writer.add_summary(summary, e)
                     auc_v = auc(val_true, val_pred)
                     precision_v, recall_v = precision_recall(val_true, val_pred)
                     # Print info
+                    """
                     print("Validation: Epoch: {}/{}".format(e, epochs),
                           "Iteration: {:d}".format(iteration),
                           "loss: {:6f}".format(np.mean(val_loss_)),
@@ -304,6 +316,7 @@ if __name__ == '__main__':
                           "precision: {:.4f}".format(precision_v),
                           "recall: {:.4f}".format(recall_v))
 
+                    """
                     # Store
                     validation_acc.append(np.mean(val_acc_))
                     validation_loss.append(np.mean(val_loss_))
@@ -323,6 +336,7 @@ if __name__ == '__main__':
     t = np.arange(1, iteration)
 
     plt.figure(figsize=(12, 6))
+    plt.title('hparam:' + hparam_str)
     plt.subplot(121)
     plt.plot(t, np.array(train_loss), 'r-', t[t % 34 == 0], np.array(validation_loss), 'b*')
     plt.ylim(-0.1, 1.0)
@@ -334,6 +348,7 @@ if __name__ == '__main__':
     # Plot Accuracies
     # plt.figure(figsize=(6, 6))
     plt.subplot(122)
+
     plt.plot(t, np.array(train_acc), 'r-', t[t % 34 == 0], validation_acc, 'b*')
     plt.ylim(0.6, 1.01, 0.05)
     plt.xlabel("iteration")
@@ -358,11 +373,50 @@ if __name__ == '__main__':
             y_true_test.append(y_true_t)
             y_pred_test.append(y_pred_t)
 
-        title = "AUC of test samples"
-        plot_roc(y_true_test, y_pred_test, title=title)
+        roc_title = "ROC of test samples hparam:" + hparam_str
+        prc_title = "precision recall curve:" + hparam_str
+        plot_roc(y_true_test, y_pred_test, title=roc_title)
+        plot_prc(y_true_test, y_pred_test, title=prc_title)
         class_name = ['sepsis', 'sep_shock']
         precision_t, recall_t = precision_recall(y_true_test, y_pred_test)
-        plot_confusion_matric(y_true_test, y_pred_test, classes=class_name)
+        plot_confusion_matric(y_true_test, y_pred_test, classes=class_name, title=hparam_str)
         print("Test accuracy: {:.6f}".format(np.mean(test_acc)),
               "Test precision: {:.4f}".format(precision_t),
               "Test recall: {:.4f}".format(recall_t))
+
+
+if __name__ == '__main__':
+    dataFile = '../data/data.pkl'
+    labelFile = '../data/label.pkl'
+
+    # r'submit_results/sub{}.csv'.format(datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    LOGDIR = "F://301/github/septic-shock/results/sub{}/".format(datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
+
+    lstm_size = 60  # 2 times the amount of channels
+    lstm_layers = 1  # Number of layers
+    batch_size = 256  # Batch size
+    seq_len = 18  # Number of steps
+    gap_len = 6
+    learning_rate = 0.0001  # Learning rate (default is 0.001)
+    epochs = 200
+    keep_prob = 0.8
+    """
+    for lstm_size in (60, 100, 200):
+        for lstm_layers in (1, 2):
+            for batch_size in (64, 128, 256):
+                hparam_str = "lstm_size=%d,lstm_layer=%d,batch_size=%d,keep_prob=%.E" % (
+                    lstm_size, lstm_layers, batch_size, keep_prob)
+                print('Starting run for %s' % hparam_str)
+                model(dataFile=dataFile, labelFile=labelFile, lstm_size=lstm_size, lstm_layers=lstm_layers,
+                      batch_size=batch_size, seq_len=seq_len, gap_len=gap_len, learning_rate=learning_rate,
+                      epochs=epochs, keep_prob=keep_prob)
+    """
+
+    for seq_len in range(2, 12, 2):
+        for gap_len in range(2, 12, 2):
+            hparam_str = "ob_len=%d,gap_len=%d" % (
+                seq_len, gap_len)
+            print('Starting run for %s' % hparam_str)
+            model(dataFile=dataFile, labelFile=labelFile, lstm_size=lstm_size, lstm_layers=lstm_layers,
+                  batch_size=batch_size, seq_len=seq_len, gap_len=gap_len, learning_rate=learning_rate,
+                  epochs=epochs, keep_prob=keep_prob)

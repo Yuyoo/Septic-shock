@@ -3,7 +3,7 @@
 # @Author  : Xiaofeifei
 # @File    : evaluation.py
 
-from sklearn.metrics import roc_auc_score, average_precision_score, roc_curve, confusion_matrix
+from sklearn.metrics import roc_auc_score, average_precision_score, roc_curve, confusion_matrix, precision_recall_curve
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
@@ -16,7 +16,7 @@ def auc(y_true, y_pred):
     return roc_auc_score(y_true, y_pred)
 
 
-def plot_roc(y_true, y_pred, title='Receiver Operating Characteristic'):
+def plot_roc(y_true, y_pred, title):
     y_pred = np.squeeze(np.reshape(y_pred, [-1, 1]))
     y_true = np.squeeze(np.reshape(y_true, [-1, 1]))
     fpr, tpr, _ = roc_curve(y_true, y_pred)
@@ -30,7 +30,9 @@ def plot_roc(y_true, y_pred, title='Receiver Operating Characteristic'):
     plt.ylabel("True Positive Rate")
     plt.xlabel("False Positive Rate")
     plt.title(title)
+    plt.savefig('../pic/' + title + '.png')
     plt.show()
+
 
 
 """
@@ -50,6 +52,26 @@ def precision_recall(y_true, y_pred):
     precision = cm[1, 1] / (cm[0, 1] + cm[1, 1])
     return precision, recall
 
+
+def plot_prc(y_true, y_pred, title):
+    y_pred = np.squeeze(np.reshape(y_pred, [-1, 1]))
+    y_true = np.squeeze(np.reshape(y_true, [-1, 1]))
+    precision, recall, _ = precision_recall_curve(y_true, y_pred)
+    average_precision = average_precision_score(y_true, y_pred)
+
+    plt.step(recall, precision, color='b', alpha=0.2,
+             where='post')
+    plt.fill_between(recall, precision, step='post', alpha=0.2,
+                     color='b')
+
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.05])
+    plt.xlim([0.0, 1.0])
+    plt.title(title + ': AP={0:0.2f}'.format(
+        average_precision))
+    plt.savefig('../pic/' + title + '.png')
+    plt.show()
 
 def plot_confusion_matric(y_true, y_pred, classes, normalize=False, title='Confusion matrix'):
     y_pred = np.squeeze(np.reshape(y_pred, [-1, 1]))
@@ -74,4 +96,6 @@ def plot_confusion_matric(y_true, y_pred, classes, normalize=False, title='Confu
     plt.tight_layout()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
+    plt.savefig('../pic/' + title + '.png')
     plt.show()
+

@@ -86,8 +86,8 @@ def integrate(feature, label):
             Time = int(label[label['subject_id'] == sid]['time'])
             featuredata = featuredata[:Time]  # 截取患病之前的特征数据
 
-        featuredata = featuredata[-48:]
-        if len(featuredata) == 48:
+        featuredata = featuredata[-24:]
+        if len(featuredata) == 24:
             count += 1
             xlist.append(featuredata)
             if sid in truelist:
@@ -95,7 +95,8 @@ def integrate(feature, label):
                 count1 += 1
             else:
                 ylist.append(0)
-    # xlist = np.array(xlist)
+    xlist = np.array(xlist)
+    ylist = np.array(ylist)
     # xlist = (xlist - np.mean(xlist, axis=0)[None, :, :]) / np.std(xlist, axis=0)[None, :, :]
     # xlist = np.around(xlist, decimals = 3)
     return xlist, ylist
@@ -105,7 +106,8 @@ if __name__ == '__main__':
     feature = pd.read_csv('../rawdata/feature.csv')
     label = pd.read_csv('../rawdata/label.csv')
     x, y = integrate(feature, label)
-    out1 = open('../rawdata/data.pkl', 'wb')
-    out2 = open('../rawdata/label.pkl', 'wb')
+    out1 = open('../data/data.pkl', 'wb')
+    out2 = open('../data/label.pkl', 'wb')
     pk.dump(x, out1)
     pk.dump(y, out2)
+
